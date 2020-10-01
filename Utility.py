@@ -90,13 +90,12 @@ class Utility():
     def normalize(self, df, cols = None):
         """
         normalize given columns. Return the dataframe
-        Will not normalize boolean columns
         """
         if cols == None:
             cols = df.columns
         from sklearn.preprocessing import StandardScaler
         for col in cols:
-            if np.issubdtype(df[col].dtype, np.number) and df[col].nunique() >2:
+            if np.issubdtype(df[col].dtype, np.number):
                 scaler = StandardScaler()
                 df[col] = scaler.fit_transform(df[col][:, np.newaxis])
         return df
@@ -133,11 +132,10 @@ class Utility():
         drop: if True, remove Others from dataframe
         """
         for col in cols:
-            if df[col].nunique() <= 50: # Categorical column
-                need = df[col].value_counts().index[:keep]
-                df[col] = np.where(df[col].isin(need), df[col], 'Other')
-                if drop == True:
-                    df = df[df[col] != 'Other']
+            need = df[col].value_counts().index[:keep]
+            df[col] = np.where(df[col].isin(need), df[col], 'Other')
+            if drop == True:
+                df = df[df[col] != 'Other']
         return df
             
     def label_encode(self, series):
@@ -168,23 +166,20 @@ class Utility():
         integer_encoded = integer_encoded.reshape(len(integer_encoded), 1)
         return onehot_encoder.fit_transform(integer_encoded)
     
-    def encode_categories(self, df, cols = None, max_nunique = 5, drop = True):
+    def encode_categories(self, df, cols = None, max_nunique = 5):
         """
         For all categorical columns in df[cols], one-hot encode the column and add it to dataframe
         Returns the transformed dataframe
         
         cols: list of column names. if None, takes all columns of df
         max_unique: max number of unique elements in a column to encode it. If too high, gets messy
-        drop: if True, removes the old column
         """
         if cols == None:
             cols = df.columns
         for col in cols:
-            if (df[col].nunique() <= max_nunique): #  categorical variable !
+            if (df[col].nunique() <= max_nunique) and (df[col].nunique() > 2): #  categorical variable !
                 dummies = pd.get_dummies(df[col], prefix = col+'_is')
                 df = pd.concat([df, dummies], axis = 1)
-                if drop == True:
-                    df = df.drop(col, axis = 1)
         df.to_csv("data_one_hot_encoded.csv")
         return df
     

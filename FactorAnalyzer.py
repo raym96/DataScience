@@ -2,14 +2,15 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import prince
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, SparsePCA
 from sklearn.manifold import TSNE
 from matplotlib.ticker import MaxNLocator
 import seaborn as sns
 from IPython.core.display import display
-from sklearn.covariance import GraphLassoCV, LedoitWolf
+from sklearn.covariance import GraphicalLassoCV, LedoitWolf
 import networkx as nx
 from mpl_toolkits.mplot3d import Axes3D 
+from sklearn import preprocessing
 
 from Utility import Utility
 
@@ -17,7 +18,8 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class FactorAnalyzer():
-    def pca(self, n_comp, df, cols=None, excluded_cols = [], color_label = None, plot = True):
+
+    def pca(self, n_comp, df, cols=None, excluded_cols = [], color_label = None, plot = True, plot_arrows = False):
         '''
         n_comp: n principal components
         cols: optional, specify which columns. Need to make sure they are numerical
@@ -44,10 +46,10 @@ class FactorAnalyzer():
         pca_results = pca.fit_transform(df_num.values)
         explained_tot_variance = sum(pca.explained_variance_ratio_)
         
-        new_df['PC0'] = pca_results[:, 0]
-        new_df['PC1'] = pca_results[:, 1]
+        new_df['PC1'] = pca_results[:, 0]
         new_df['PC2'] = pca_results[:, 1]
-
+        if n_comp > 2:
+            new_df['PC3'] = pca_results[:, 2]
         
         if plot:
             # Plot explained variance per component
@@ -63,40 +65,77 @@ class FactorAnalyzer():
             plt.show()
 
             # Show component heatmap
-            index = ["PC{0:d}[{1:.2f}]".format(i,pca.explained_variance_ratio_[i]) for i in range(n_comp)]
+            index = ["PC{0:d}[{1:.2f}]".format(i+1,pca.explained_variance_ratio_[i]) for i in range(n_comp)]
             components = pd.DataFrame(pca.components_, columns = cols, index =index)
             fig, ax = plt.subplots(figsize = (10,8))
-            sns.heatmap(components.T, annot = True, center = 0, fmt = '.2f', 
-                        linewidth = 0.5,xticklabels=True, yticklabels=True)
+            sns.heatmap(components.T, annot = True, center = 0, fmt = '.2f', linewidth = 0.5)
             ax.set_title("Loading factors")
             plt.xticks(rotation = 45)
             ax.set_ylim(components.T.shape[0]-1e-9, -1e-9)
             ax.set_ylabel("Feature")
             ax.set_xlabel("Component[Explained inertia]")
             plt.show()
-        
-            # Visualize over the 2 first components, if color label is given
+            
+            
+            new_df['PC1'] = (new_df['PC1'])/(new_df['PC1'].max()-new_df['PC1'].min())
+            new_df['PC2'] = (new_df['PC2'])/(new_df['PC2'].max()-new_df['PC2'].min())
+            new_df['PC3'] = (new_df['PC3'])/(new_df['PC3'].max()-new_df['PC3'].min())
+            
+            # Visualize over the 2 first components
+            fig, ax = plt.subplots(figsize = (10,10))
+            ax.set_xlim([-1,1])
+            ax.set_ylim([-1,1])
+            plt.grid(True)
+            if color_label != None: 
+                if not np.issubdtype(new_df[color_label].dtype, np.number): # If color label categorical, label with different colors 
+                    palette = sns.color_palette("hls", len(new_df[color_label].unique()))
+                    sns.scatterplot(
+                        x='PC1', y='PC2',
+                        hue=color_label,
+                        palette=palette,
+                        data=new_df,
+                        legend="full",
+                        alpha=0.8
+                    )  
+                else: # If color label is continuous, gives a colormap
+                    cmap = sns.dark_palette("palegreen", as_cmap=True)
+                    points = ax.scatter(pca_results[:, 0], pca_results[:, 1], c=new_df[color_label], cmap=cmap, alpha=0.8)
+                    fig.colorbar(points)
+            else: # Same color fo all points
+                sns.scatterplot(
+                        x='PC1', y='PC2',
+                        data=new_df,
+                    ) 
+            if plot_arrows:
+                for col in cols:
+                    plt.arrow(0,0, components[col][0],components[col][1], length_includes_head = True, head_width = 0.03)
+                    props = dict(boxstyle='round', facecolor='white', alpha=0.8)
+                    plt.text(components[col][0]* 1.15, components[col][1] * 1.15, col, color = 'k', 
+                             ha = 'center', va = 'center', fontsize = 10, bbox = props)
+            plt.xlabel("PC1 ({:.2%} explained variance)".format(pca.explained_variance_ratio_[0]))    
+            plt.ylabel("PC2 ({:.2%} explained variance)".format(pca.explained_variance_ratio_[1]))   
+            plt.show()
+   
+            # OLDER VERSION
             if color_label != None:               
-                if not np.issubdtype(new_df[color_label].dtype, np.number):
+                if not np.issubdtype(new_df[color_label].dtype, np.number): # If color label categorical, label with different colors 
                     palette = sns.color_palette("hls", len(new_df[color_label].unique()))
                     plt.figure(figsize=(16, 10))
                     sns.scatterplot(
-                        x='PC0', y='PC1',
+                        x='PC1', y='PC2',
                         hue=color_label,
                         palette=palette,
                         data=new_df,
                         legend="full",
                         alpha=0.8
                     )
-                else:  # Colormap if is continuous
+                else:  # If color label is continuous, gives a colormap
                     f, ax = plt.subplots(figsize=(16, 10))
-                    # cmap = sns.cubehelix_palette(as_cmap=True)
-                    cmap = plt.get_cmap('gist_rainbow')
-                    # cmap = sns.light_palette("blue", as_cmap=True)
+                    cmap = sns.dark_palette("palegreen", as_cmap=True)
                     points = ax.scatter(pca_results[:, 0], pca_results[:, 1], c=new_df[color_label], cmap=cmap, alpha=0.8)
                     f.colorbar(points)
-                plt.xlabel("PC0, inertia = %.4f" % pca.explained_variance_ratio_[0])    
-                plt.ylabel("PC1, inertia = %.4f" % pca.explained_variance_ratio_[1])    
+                plt.xlabel("PC1 ({:.2%} explained variance)".format(pca.explained_variance_ratio_[0]))    
+                plt.ylabel("PC2 ({:.2%} explained variance)".format(pca.explained_variance_ratio_[1]))   
                 plt.show()
         
         return {"results": pd.DataFrame(pca_results, columns = np.arange(n_comp)),
@@ -134,7 +173,7 @@ class FactorAnalyzer():
                         )
             else:
                 f, ax = plt.subplots(figsize=(16, 10))
-                cmap = plt.get_cmap('gist_rainbow')
+                cmap = sns.dark_palette("palegreen", as_cmap=True)
                 points = ax.scatter(tsne_results[:, 0], tsne_results[:, 1], c=new_df[color_label], cmap=cmap, alpha=0.8)
                 f.colorbar(points)
         return {"results": pd.DataFrame(tsne_results, columns = np.arange(2))}
@@ -172,7 +211,7 @@ class FactorAnalyzer():
             cols = df._get_numeric_data().columns
         data = new_df[cols]
         if style == "GraphLassoCV":
-            model = GraphLassoCV(alphas = [param,param], cv = 10, max_iter = 5000)
+            model = GraphicalLassoCV(alphas = [param,param], cv = 10, max_iter = 5000)
             model.fit(data)
             sparce_mat = np.zeros(np.shape(model.precision_))
             sparce_mat[model.precision_ != 0] = -1
@@ -247,3 +286,91 @@ class FactorAnalyzer():
         plt.show()
         print("Explained inertia:", mca.explained_inertia_)
         return mca
+    
+    
+# =============================================================================
+# Robust PCA
+# =============================================================================
+class R_pca:
+
+    def __init__(self, D, mu=None, lmbda=None):
+        self.D = D
+        self.S = np.zeros(self.D.shape)
+        self.Y = np.zeros(self.D.shape)
+
+        if mu:
+            self.mu = mu
+        else:
+            self.mu = np.prod(self.D.shape) / (4 * self.frobenius_norm(self.D))
+
+        self.mu_inv = 1 / self.mu
+
+        if lmbda:
+            self.lmbda = lmbda
+        else:
+            self.lmbda = 1 / np.sqrt(np.max(self.D.shape))
+
+    @staticmethod
+    def frobenius_norm(M):
+        return np.linalg.norm(M, ord='fro')
+
+    @staticmethod
+    def shrink(M, tau):
+        return np.sign(M) * np.maximum((np.abs(M) - tau), np.zeros(M.shape))
+
+    def svd_threshold(self, M, tau):
+        U, S, V = np.linalg.svd(M, full_matrices=False)
+        return np.dot(U, np.dot(np.diag(self.shrink(S, tau)), V))
+
+    def fit(self, tol=None, max_iter=1000, iter_print=100):
+        iter = 0
+        err = np.Inf
+        Sk = self.S
+        Yk = self.Y
+        Lk = np.zeros(self.D.shape)
+
+        if tol:
+            _tol = tol
+        else:
+            _tol = 1E-7 * self.frobenius_norm(self.D)
+
+        while (err > _tol) and iter < max_iter:
+            Lk = self.svd_threshold(
+                self.D - Sk + self.mu_inv * Yk, self.mu_inv)
+            Sk = self.shrink(
+                self.D - Lk + (self.mu_inv * Yk), self.mu_inv * self.lmbda)
+            Yk = Yk + self.mu * (self.D - Lk - Sk)
+            err = self.frobenius_norm(self.D - Lk - Sk)
+            iter += 1
+            if (iter % iter_print) == 0 or iter == 1 or iter > max_iter or err <= _tol:
+                print('iteration: {0}, error: {1}'.format(iter, err))
+
+        self.L = Lk
+        self.S = Sk
+        return Lk, Sk
+
+    def plot_fit(self, size=None, tol=0.1, axis_on=True):
+
+        n, d = self.D.shape
+
+        if size:
+            nrows, ncols = size
+        else:
+            sq = np.ceil(np.sqrt(n))
+            nrows = int(sq)
+            ncols = int(sq)
+
+        ymin = np.nanmin(self.D)
+        ymax = np.nanmax(self.D)
+        print('ymin: {0}, ymax: {1}'.format(ymin, ymax))
+
+        numplots = np.min([n, nrows * ncols])
+        plt.figure()
+
+        for n in range(numplots):
+            plt.subplot(nrows, ncols, n + 1)
+            plt.ylim((ymin - tol, ymax + tol))
+            plt.plot(self.L[n, :] + self.S[n, :], 'r')
+            plt.plot(self.L[n, :], 'b')
+            if not axis_on:
+                plt.axis('off')

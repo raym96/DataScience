@@ -6,6 +6,7 @@ import matplotlib.patches as mpatches
 import matplotlib.cm as cm
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib.lines import Line2D
+import copy
 
 from Utility import Utility
 from FactorAnalyzer import FactorAnalyzer
@@ -125,7 +126,21 @@ class Clusterer:
         plt.ylabel("intertia")
         plt.title("Elbow method")
         return inertias
-
+    
+    def plot_cluster_centers(self, centers):
+        """
+        Heatmap visualization 
+        """
+        fig, ax = plt.subplots(figsize = (10,8))
+        sns.heatmap(centers.T, annot = True, center = 0, fmt = '.2f', linewidth = 0.5, cmap = 'viridis')
+        ax.set_title("Cluster centers", fontsize = 20)
+        plt.xticks(rotation = 0)
+        plt.yticks(rotation = 0)
+        ax.set_ylim(centers.T.shape[0]-1e-9, -1e-9)
+        ax.set_xlabel("Cluster")
+        plt.show()
+    
+    
     def k_means(self, df, n_clusters):
         '''
         Returns the label encoded clusters for each example in the df.
@@ -137,6 +152,9 @@ class Clusterer:
         print("Clusters centers:")
         display(pd.DataFrame(kmeans.cluster_centers_, columns = df.columns,
                              index = ["cluster %i" %i for i in np.arange(n_clusters)]))
+        
+        centers = pd.DataFrame(kmeans.cluster_centers_, columns = df.columns, index =["cluster %i" %i for i in np.arange(n_clusters)])
+        self.plot_cluster_centers(centers)
         # return Utility().label_encode(kmeans.labels_)
         return kmeans.labels_
 
@@ -160,8 +178,11 @@ class Clusterer:
                              )
         
         clusters = np.array(fcluster(Z, k, criterion='maxclust')) -1
-        X['clusters'] = clusters
-        display(X.groupby(['clusters']).mean())
+        X_copy = copy.deepcopy(X)
+        X_copy['clusters'] = clusters
+        centers = X_copy.groupby(['clusters']).mean()
+        display(centers)
+        self.plot_cluster_centers(centers)
         return clusters
 
 
@@ -249,31 +270,31 @@ class Clusterer:
             print('Selected number of components:', best_component_bic)
             return best_gmm_bic.predict(X)
 
-    def plot_cluster_2D(self, df, clusters, pca = None, plot_pca = False):
+    def plot_cluster_2D(self, df, clusters, pca_plot = False):
         """
         Give a 2D view of clusters using 2-dimensional PCA
 
         df: dataframe
         clusters: list of labels
-        pca: enter pca['results']
         """
         f = FactorAnalyzer()
-        if pca == None:
-            pca = f.pca(2, df, plot = plot_pca)
+        pca = f.pca(2, df, plot = pca_plot)
         palette = sns.color_palette('hls', len(np.unique(clusters))+1)
 
         plt.scatter(pca['results'][0],pca['results'][1], c = [palette[i] for i in clusters])
 
         handles = [mpatches.Patch(color=palette[i], label="cluster %i" % i) for i in np.unique(clusters)]
         plt.legend(handles = handles)
-        plt.xlabel("PC0")
-        plt.ylabel("PC1")
+        plt.xlabel("PC1 ({:.2%} explained variance)".format(pca['explained_variance'][0]))    
+        plt.ylabel("PC2 ({:.2%} explained variance)".format(pca['explained_variance'][1]))   
         plt.show()
 
-    def plot_cluster_3D(self, df, clusters, pca = None, plot_pca = False):
+    def plot_cluster_3D(self, df, clusters, pca_plot = False):
+        """
+        Give a 3D view of clusters using 3-dimensional PCA
+        """
         f = FactorAnalyzer()
-        if pca == None:
-            pca = f.pca(3, df, plot = plot_pca)
+        pca = f.pca(3, df, plot = pca_plot)
         palette = sns.color_palette('hls', len(np.unique(clusters))+1)
 
         fig = plt.figure(figsize = (10,10))
@@ -281,9 +302,9 @@ class Clusterer:
 
         ax.scatter(pca['results'][0], pca['results'][1], pca['results'][2],
                    c = [palette[i] for i in clusters], marker = 'o', s = 50)
-        ax.set_xlabel("PC0")
-        ax.set_ylabel("PC1")
-        ax.set_zlabel("PC2")
+        ax.set_xlabel("PC1 ({:.2%} explained variance)".format(pca['explained_variance'][0]))    
+        ax.set_ylabel("PC2 ({:.2%} explained variance)".format(pca['explained_variance'][1]))   
+        ax.set_zlabel("PC3 ({:.2%} explained variance)".format(pca['explained_variance'][2]))   
 
         scatter_proxy = [Line2D([0],[0], linestyle = 'none', c = palette[i], marker = 'o') for i in np.unique(clusters)]
         label = ["cluster %i" % i for i in np.unique(clusters)]

@@ -131,7 +131,7 @@ class DataExplorer():
         
         # Cluster map
         clustergrid = sns.clustermap(corr, square = True, annot = annot, 
-                                     linewidth = 0.2, figsize = (8,8), fmt = ".2f", yticklabels=True, xticklabels = True)
+                                     linewidth = 0.2, figsize = (8,8), fmt = ".2f")
         clustergrid.ax_heatmap.set_ylim(corr.shape[0]-1e-9, -1e-9)
         plt.show()
         
@@ -349,8 +349,9 @@ class DataExplorer():
         fig, ax = plt.subplots(figsize = (10,6))
         if percentage:
             count_data = count_data.divide(count_data.sum(axis=1), axis=0)
-            count_data *= 100
         count_data.plot.bar(stacked=True, ax = ax)
+        vals = ax.get_yticks()
+        ax.set_yticklabels(['{:,.0%}'.format(x) for x in vals])
         plt.show()
 
     
