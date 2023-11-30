@@ -1,3 +1,4 @@
+fig.for_each_trace(lambda t: t.update(marker_color=px.colors.qualitative.Plotly[1:][px.colors.qualitative.Plotly.index(t.marker.color)]))
 
 
 Data Science toolkit
